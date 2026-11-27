@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RMK Smart Campus Navigation</title>
+    
+    <!-- QR Code Generator -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --sidebar-bg: #0f172a;
+            --bg-color: #f8fafc;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --success: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            
+            /* Blueprint Colors */
+            --bp-wall: #f87171; /* Light red/pink walls */
+            --bp-pillar: #581c87; /* Purple pillars */
+            --bp-room-bg: #ffffff;
+            --bp-room-hover: #eff6ff;
+            --bp-text: #1e3a8a;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-main); height: 100vh; overflow: hidden; display: flex; }
+
+        /* --- LOGIN SCREEN --- */
+        #login-screen { position: fixed; inset: 0; background: var(--sidebar-bg); display: flex; justify-content: center; align-items: center; z-index: 9999; transition: opacity 0.3s;}
+        .login-card { background: white; padding: 40px; border-radius: 16px; width: 400px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); text-align: center;}
+        .login-card h1 { color: var(--primary-dark); margin-bottom: 8px; }
+        .login-card p { color: var(--text-muted); margin-bottom: 24px; font-size: 14px;}
+        .login-form { display: flex; flex-direction: column; gap: 16px; text-align: left;}
+        .login-form label { font-size: 13px; font-weight: 600; }
+        .login-form input, .login-form select { padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+        .login-btn { background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: 600; cursor: pointer; font-size: 16px; transition: 0.2s; margin-top: 10px;}
+        .login-btn:hover { background: var(--primary-dark); }
+
+        /* --- APP LAYOUT --- */
+        #app-container { display: none; width: 100%; height: 100%; } /* Hidden until login */
+        
+        /* Sidebar */
+        .sidebar { width: 260px; background: var(--sidebar-bg); color: white; transition: width 0.3s; display: flex; flex-direction: column; flex-shrink: 0; z-index: 1000; height: 100vh;}
+        .sidebar.closed { width: 80px; }
+        .brand { display: flex; align-items: center; gap: 12px; padding: 20px; border-bottom: 1px solid #1e293b; white-space: nowrap; overflow: hidden;}
+        .logo-icon { background: var(--primary); padding: 8px 12px; border-radius: 8px; font-weight: bold; flex-shrink: 0; }
+        .brand h2 { font-size: 14px; line-height: 1.2; font-weight: 500; transition: opacity 0.2s;}
+        .sidebar.closed .brand h2, .sidebar.closed .nav-item span { opacity: 0; pointer-events: none; }
+        
+        .nav-menu { padding: 20px 10px; display: flex; flex-direction: column; gap: 8px; }
+        .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: 8px; cursor: pointer; color: #cbd5e1; transition: all 0.2s; white-space: nowrap; }
+        .nav-item:hover, .nav-item.active { background: var(--primary); color: white; }
+
+        /* Main Content */
+        .main-wrapper { flex: 1; display: flex; flex-direction: column; overflow: hidden; height: 100vh;}
+        .topbar { height: 70px; background: white; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; padding: 0 24px; flex-shrink: 0; z-index: 900;}
+        .menu-btn { background: none; border: none; cursor: pointer; color: var(--text-muted); display: flex; align-items: center;}
+        .user-profile { display: flex; align-items: center; gap: 12px; }
+        .avatar { width: 40px; height: 40px; background: var(--primary); color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }
+        .user-info { display: flex; flex-direction: column; font-size: 12px; }
+        .user-info span { color: var(--text-muted); }
+
+        .content-area { flex: 1; overflow-y: auto; padding: 24px; display: none; }
+        .content-area.active { display: block; }
+        #dashboard-area { padding: 0; }
+
+        /* Dashboard Layout */
+        .dashboard-layout { display: flex; height: 100%; width: 100%; }
+        .nav-panel { width: 400px; display: flex; flex-direction: column; gap: 16px; padding: 24px; background: var(--bg-color); overflow-y: auto; flex-shrink: 0; border-right: 1px solid var(--border);}
+        .map-area { flex: 1; background: #e2e8f0; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center;}
+
+        /* UI Components */
+        .panel-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;}
+        .toggle-group { display: flex; background: #cbd5e1; border-radius: 8px; padding: 4px; }
+        .toggle-group button { border: none; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 14px; background: transparent; transition: 0.2s; font-weight: 600;}
+        .toggle-group button.active { background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); color: var(--primary);}
+
+        .search-box { display: flex; align-items: center; gap: 10px; background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .search-box select { border: none; outline: none; width: 100%; font-size: 14px; background: transparent; font-weight: 500;}
+
+        .route-details { background: white; padding: 16px; border-radius: 12px; border: 1px solid var(--border); display: none; flex-direction: column; gap: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);}
+        .route-details.show { display: flex; }
+        .location-card { display: flex; gap: 12px; align-items: center; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;}
+        .dot.green { background: var(--success); }
+        .dot.red { background: var(--danger); }
+        .location-card small { color: var(--text-muted); font-size: 11px; text-transform: uppercase;}
+        .location-card p { font-weight: 600; font-size: 14px; }
+        .stats { display: flex; justify-content: space-between; font-size: 14px; color: var(--text-main); border-top: 1px solid var(--border); padding-top: 12px; font-weight: 500;}
+        
+        .alt-route-btn { background: #f1f5f9; color: var(--primary-dark); border: 1px solid var(--border); padding: 10px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; font-size: 13px; display: flex; align-items: center; gap: 6px; justify-content: center; transition: 0.2s;}
+        .alt-route-btn:hover { background: #e2e8f0; }
+        .btn-reset { background: #fee2e2; color: var(--danger); border: none; padding: 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: 600; font-size: 13px;}
+
+        /* Indoor Specifics */
+        .indoor-controls { display: none; flex-direction: column; gap: 10px; background: white; padding: 16px; border-radius: 12px; border: 1px solid var(--border); }
+        .indoor-controls.show { display: flex; }
+        .indoor-controls label { font-size: 12px; font-weight: bold; color: var(--text-muted); text-transform: uppercase;}
+        .indoor-controls select { padding: 10px; border-radius: 6px; border: 1px solid var(--border); font-size: 14px; font-weight: 500;}
+        
+        .sensor-status { display: none; flex-direction: column; gap: 10px; margin-top: 16px;}
+        .sensor-status.show { display: flex; }
+        .sensor-card { display: flex; align-items: center; gap: 12px; background: white; padding: 12px; border-radius: 8px; border: 1px solid var(--border); }
+        .sensor-card small { display: block; color: var(--text-muted); font-size: 11px; text-transform: uppercase;}
+        .sensor-card strong { font-size: 14px; color: var(--text-main);}
+
+        /* Outdoor Map */
+        #custom-map-container { display: none; width: 100%; height: 100%; position: absolute; top:0; left:0; align-items: center; justify-content: center;}
+        #custom-map-container.show { display: flex; }
+        .map-svg { width: 100%; height: 100%; object-fit: cover; }
+        .route-path { fill: none; stroke: var(--primary); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1200; stroke-dashoffset: 1200; animation: drawRoute 2s ease-out forwards; box-shadow: 0 0 10px rgba(37,99,235,0.5); }
+        @keyframes drawRoute { to { stroke-dashoffset: 0; } }
+        .map-marker { cursor: pointer; transition: transform 0.2s; filter: drop-shadow(0px 4px 6px rgba(0,0,0,0.3));}
+
+        /* Indoor Architectural Blueprint */
+        #indoor-map-container { display: none; padding: 20px; height: 100%; width: 100%; flex-direction: column; align-items: center; justify-content: center; background: #f1f5f9; }
+        .floor-plan-wrapper { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid var(--border); width: 100%; max-width: 900px; height: 100%; max-height: 700px; display: flex; justify-content: center; align-items: center;}
+        
+        /* SVG Blueprint Styles */
+        .bp-bg { fill: #ffffff; }
+        .bp-wall { fill: none; stroke: var(--bp-wall); stroke-width: 4; }
+        .bp-wall-thick { fill: none; stroke: var(--bp-wall); stroke-width: 8; }
+        .bp-pillar { fill: var(--bp-pillar); }
+        .bp-room { fill: var(--bp-room-bg); stroke: var(--bp-wall); stroke-width: 2; cursor: pointer; transition: 0.2s; }
+        .bp-room:hover { fill: var(--bp-room-hover); }
+        .bp-room-text { font-family: 'Segoe UI', sans-serif; font-weight: 700; fill: var(--bp-text); pointer-events: none; text-anchor: middle; font-size: 14px;}
+        .bp-room-subtext { font-family: 'Segoe UI', sans-serif; font-weight: 400; fill: #64748b; pointer-events: none; text-anchor: middle; font-size: 10px;}
+        .bp-door { fill: none; stroke: #3b82f6; stroke-width: 2; stroke-dasharray: 2, 2; }
+        .bp-label { font-family: 'Segoe UI', sans-serif; font-weight: 600; fill: #64748b; font-size: 16px; }
+
+        /* Forms & Cards */
+        .card { background: white; padding: 24px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 24px; max-width: 800px; margin: 0 auto 24px auto; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);}
+        .card h2 { margin-bottom: 8px; color: var(--primary-dark);}
+        .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+        .service-form { display: flex; flex-direction: column; gap: 16px; }
+        .form-row { display: flex; gap: 16px; }
+        .form-row .form-group { flex: 1; }
+        .form-group { display: flex; flex-direction: column; gap: 6px; }
+        .form-group label { font-size: 13px; font-weight: 600; color: var(--text-main); }
+        .form-group input, .form-group select, .form-group textarea { padding: 10px; border: 1px solid var(--border); border-radius: 6px; font-size: 14px; outline: none; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+        .primary-btn { background: var(--primary); color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer; margin-top: 10px; transition: 0.2s;}
+        .primary-btn:hover { background: var(--primary-dark); }
+
+        /* Tokens */
+        .token-display { text-align: center; display: none; }
+        .ticket { border: 2px dashed var(--primary); padding: 30px; border-radius: 12px; display: inline-block; margin-bottom: 20px; background: #eff6ff; text-align: center;}
+        .ticket h1 { font-size: 48px; color: var(--primary); margin: 10px 0; letter-spacing: 2px;}
+        #qrcode { margin: 15px auto; display: flex; justify-content: center; background: white; padding: 10px; border-radius: 8px; width: fit-content;}
+
+        /* Lost & Found Grid */
+        .items-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 16px; margin-top: 20px;}
+        .item-card { border: 1px solid var(--border); padding: 16px; border-radius: 8px; position: relative; background: white;}
+        .item-card.lost { border-left: 4px solid var(--danger); }
+        .item-card.found { border-left: 4px solid var(--success); }
+        .badge { position: absolute; top: 16px; right: 16px; font-size: 11px; font-weight: bold; padding: 2px 6px; border-radius: 4px; background: #f1f5f9; text-transform: uppercase;}
+        .item-img { width: 100%; height: 120px; object-fit: cover; border-radius: 6px; margin-top: 10px; display: none;}
+        
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN SCREEN -->
+    <div id="login-screen">
+        <div class="login-card">
+            <h1>RMK Smart Campus</h1>
+            <p>Select your role to continue</p>
+            <form class="login-form" onsubmit="handleLogin(event)">
+                <div>
+                    <label>Login As</label>
+                    <select id="login-role" required onchange="toggleLoginFields()">
+                        <option value="student">Student</option>
+                        <option value="visitor">New Visitor</option>
+                    </select>
+                </div>
+                <div id="student-fields">
+                    <label>Student ID / Email</label>
+                    <input type="text" placeholder="e.g., 21CS1042" required>
+                </div>
+                <div id="visitor-fields" class="hidden">
+                    <label>Full Name</label>
+                    <input type="text" placeholder="Enter your name">
+                    <label style="margin-top:10px; display:block;">Purpose of Visit</label>
+                    <input type="text" placeholder="e.g., Admission Enquiry">
+                </div>
+                <button type="submit" class="login-btn">Enter Portal</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MAIN APP CONTAINER (Hidden initially) -->
+    <div id="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="brand">
+                <div class="logo-icon">RMK</div>
+                <h2>RMK Engineering<br>College</h2>
+            </div>
+            <nav class="nav-menu">
+                <div class="nav-item active" onclick="switchTab('dashboard', this)">
+                    <i data-lucide="map"></i> <span>Smart Navigation</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('booking', this)">
+                    <i data-lucide="bookmark"></i> <span>Resource Booking</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('tokens', this)">
+                    <i data-lucide="file-text"></i> <span>Service Tokens</span>
+                </div>
+                <div class="nav-item" onclick="switchTab('lost', this)">
+                    <i data-lucide="help-circle"></i> <span>Lost & Found</span>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Wrapper -->
+        <div class="main-wrapper">
+            <!-- Topbar -->
+            <header class="topbar">
+                <button class="menu-btn" onclick="toggleSidebar()">
+                    <i data-lucide="menu"></i>
+                </button>
+                <div style="font-weight: 600; color: var(--text-muted);" id="breadcrumb">RMK / Smart Navigation</div>
+                <div class="user-profile">
+                    <div class="avatar" id="user-avatar">S</div>
+                    <div class="user-info">
+                        <strong id="user-display-name">Student</strong>
+                        <span id="user-role-display">Student account</span>
+                    </div>
+                    <button onclick="logout()" style="background:none; border:none; cursor:pointer; color:var(--danger); margin-left:10px;" title="Logout">
+                        <i data-lucide="log-out"></i>
+                    </button>
+                </div>
+            </header>
+
+            <!-- 1. DASHBOARD -->
+            <div id="dashboard-area" class="content-area active" style="padding:0;">
+                <div class="dashboard-layout">
+                    
+                    <!-- Left Panel -->
+                    <div class="nav-panel">
+                        <div class="panel-header">
+                            <h2>Navigation</h2>
+                            <div class="toggle-group">
+                                <button id="btn-outdoor" class="active" onclick="setNavMode('outdoor')">Outdoor</button>
+                                <button id="btn-indoor" onclick="setNavMode('indoor')">Indoor</button>
+                            </div>
+                        </div>
+
+                        <!-- Outdoor UI -->
+                        <div id="outdoor-ui">
+                            <div class="search-box">
+                                <i data-lucide="search" size="18"></i>
+                                <select id="dest-select" onchange="handleOutdoorRoute(this.value)">
+                                    <option value="">Select Destination...</option>
+                                    <option value="rj">RJ Block</option>
+                                    <option value="pv">PV Block</option>
+                                    <option value="ss">SS Block</option>
+                                    <option value="ground">College Ground</option>
+                                    <option value="cafeteria">Cafeteria</option>
+                                    <option value="mess">MESS</option>
+                                    <option value="auditorium">Auditorium</option>
+                                    <option value="seminar">Seminar Halls</option>
+                                    <option value="library">Library</option>
+                                </select>
+                            </div>
+                            
+                            <div class="route-details" id="outdoor-route-details">
+                                <div class="location-card">
+                                    <div class="dot green"></div>
+                                    <div><small>Start</small><p>Main Entrance</p></div>
+                                </div>
+                                <div class="location-card">
+                                    <div class="dot red"></div>
+                                    <div><small>Destination</small><p id="dest-name">-</p></div>
+                                </div>
+                                <div class="stats">
+                                    <span id="route-dist">Distance: 0m</span>
+                                    <span id="route-time">Time: ~0 mins</span>
+                                </div>
+                                <button class="alt-route-btn" onclick="toggleAltRoute()"><i data-lucide="git-branch" size="16"></i> Show Alternative Route</button>
+                                <button class="btn-reset" onclick="resetNavigation()"><i data-lucide="rotate-ccw" size="16"></i> Reset Navigation</button>
+                            </div>
+                        </div>
+
+                        <!-- Indoor UI -->
+                        <div id="indoor-ui" class="hidden">
+                            <div class="indoor-controls show">
+                                <label>Select Block</label>
+                                <select id="block-select" onchange="updateIndoorMap()">
+                                    <option value="rj">RJ Block</option>
+                                    <option value="pv">PV Block</option>
+                                    <option value="ss">SS Block</option>
+                                </select>
+                                <label>Select Floor</label>
+                                <select id="floor-select" onchange="updateIndoorMap()">
+                                    <option value="Ground">Ground Floor</option>
+                                    <option value="1st">1st Floor</option>
+                                    <option value="2nd">2nd Floor</option>
+                                </select>
+                            </div>
+                            <div class="sensor-status show">
+                                <div class="sensor-card">
+                                    <i data-lucide="lightbulb" color="#f59e0b" size="28"></i>
+                                    <div><small>LiFi Positioning</small><strong id="lifi-status">Searching...</strong></div>
+                                </div>
+                                <div class="sensor-card">
+                                    <i data-lucide="bluetooth" color="#3b82f6" size="28"></i>
+                                    <div><small>Bluetooth Beacon</small><strong id="ble-status">Searching...</strong></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Map Area -->
+                    <div class="map-area">
+                        
+                        <!-- OUTDOOR MAP -->
+                        <div id="custom-map-container" class="show">
+                            <svg viewBox="0 0 800 600" class="map-svg" preserveAspectRatio="xMidYMid slice">
+                                <rect width="800" height="600" fill="#e2e8f0"/>
+                                <path d="M0,0 L350,0 L250,150 L50,150 Z" fill="#bbf7d0"/>
+                                <path d="M600,400 L800,400 L800,600 L550,600 Z" fill="#bbf7d0"/>
+                                <path d="M200,400 Q300,450 400,400 T600,450" fill="none" stroke="#bfdbfe" stroke-width="30" stroke-linecap="round"/>
+                                <path d="M-50,100 L350,150 L450,150 L500,100 L850,100" fill="none" stroke="white" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M100,-50 L150,200 L150,650" fill="none" stroke="white" stroke-width="35" stroke-linecap="round"/>
+                                <path d="M600,650 L650,350 L850,300" fill="none" stroke="white" stroke-width="40" stroke-linecap="round"/>
+                                <path d="M-50,500 L300,400 L500,450 L850,300" fill="none" stroke="#fcd34d" stroke-width="25" stroke-linecap="round"/>
+                                
+                                <path id="route-main" class="route-path hidden" d="" />
+                                <path id="route-alt" class="route-path hidden" d="" stroke="#f59e0b" style="animation: none;"/>
+                                
+                                <g class="map-marker" transform="translate(150, 550)">
+                                    <circle cx="0" cy="0" r="14" fill="var(--primary)" stroke="white" stroke-width="4"/>
+                                    <circle cx="0" cy="0" r="4" fill="white"/>
+                                </g>
+                                <g id="marker-dest" class="map-marker hidden">
+                                    <path d="M0,-35 C-18,-35 -25,-18 0,0 C25,-18 18,-35 0,-35 Z" fill="var(--danger)" stroke="white" stroke-width="2"/>
+                                    <circle cx="0" cy="-20" r="6" fill="white"/>
+                                </g>
+                                <text x="100" y="80" font-size="18" fill="#475569" font-weight="bold">RJ BLOCK</text>
+                                <text x="650" y="130" font-size="18" fill="#475569" font-weight="bold">PV BLOCK</text>
+                                <text x="280" y="180" font-size="18" fill="#475569" font-weight="bold">SS BLOCK</text>
+                                <text x="450" y="550" font-size="18" fill="#475569" font-weight="bold">GROUND</text>
+                                <text x="680" y="450" font-size="18" fill="#475569" font-weight="bold">CAFETERIA</text>
+                            </svg>
+                        </div>
+
+                        <!-- INDOOR BLUEPRINT MAP -->
+                        <div id="indoor-map-container">
+                            <h3 id="indoor-map-title" style="margin-bottom: 10px; color: var(--text-main); font-size: 20px;">RJ Block - Ground Floor</h3>
+                            <div class="floor-plan-wrapper">
+                                <svg viewBox="0 0 800 600" class="floor-plan" id="floor-svg">
+                                    <!-- Dynamic Blueprint populated here -->
+                                </svg>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. BOOKING -->
+            <div id="booking-area" class="content-area">
+                <div class="card" id="booking-form-card">
+                    <h2>Reserve a Campus Space</h2>
+                    <p class="subtitle">Book seminar halls, meeting rooms, or blocks for events.</p>
+                    <form class="service-form" onsubmit="submitBooking(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Select Block</label>
+                                <select required>
+                                    <option value="">Choose Block</option>
+                                    <option value="RJ">RJ Block</option>
+                                    <option value="SS">SS Block</option>
+                                    <option value="PV">PV Block</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Hall / Room Name</label>
+                                <input type="text" placeholder="e.g., Seminar Hall 1" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Date</label>
+                                <input type="date" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Time</label>
+                                <input type="time" required>
+                            </div>
+                            <div class="form-group">
+                                <label>No. of Persons</label>
+                                <input type="number" placeholder="e.g., 50" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Reason for Booking</label>
+                            <textarea rows="3" placeholder="e.g., LUB Inauguration" required></textarea>
+                        </div>
+                        <button type="submit" class="primary-btn">Submit Reservation Request</button>
+                    </form>
+                </div>
+                <div class="card hidden" id="booking-success-card" style="text-align: center;">
+                    <div style="font-size: 48px; color: var(--success); margin-bottom: 16px;"><i data-lucide="check-circle" size="48" style="margin:0 auto;"></i></div>
+                    <h2>Booking Request Submitted!</h2>
+                    <p class="subtitle">Your request has been sent to the admin for approval.</p>
+                    <button class="primary-btn" onclick="resetBooking()">Book Another Space</button>
+                </div>
+            </div>
+
+            <!-- 3. TOKENS -->
+            <div id="tokens-area" class="content-area">
+                <div class="card" id="token-form-card">
+                    <h2>Service Token Generator</h2>
+                    <p class="subtitle">Generate a token to meet with Principal, HOD, or Admin Help Desk.</p>
+                    <form class="service-form" onsubmit="generateToken(event)">
+                        <div class="form-group">
+                            <label>Purpose of Visit</label>
+                            <select id="token-purpose" required>
+                                <option value="">Select Service</option>
+                                <option value="Admin Help Desk">Admin Help Desk</option>
+                                <option value="HOD Visit">HOD Visit</option>
+                                <option value="Meet Principal">Meet Principal</option>
+                                <option value="Document Verification">Document Verification</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="primary-btn">Generate Token</button>
+                    </form>
+                </div>
+                <div class="card hidden" id="token-display-card">
+                    <div class="token-display" style="display: block;">
+                        <div class="ticket">
+                            <h3 style="color: var(--text-muted); font-weight: normal; font-size: 14px; text-transform: uppercase;">Your Token</h3>
+                            <h1 id="ticket-id">RMK-0000</h1>
+                            <p style="margin: 8px 0;"><strong>Purpose:</strong> <span id="ticket-purpose">-</span></p>
+                            <p style="margin: 8px 0;"><strong>Generated at:</strong> <span id="ticket-time">-</span></p>
+                            <div id="qrcode"></div>
+                        </div>
+                        <br>
+                        <button class="primary-btn" onclick="resetToken()">Generate New Token</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. LOST & FOUND -->
+            <div id="lost-area" class="content-area">
+                <div class="card">
+                    <h2>Report Lost / Found Item</h2>
+                    <form class="service-form" onsubmit="submitLostItem(event)">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Status</label>
+                                <select id="lf-type">
+                                    <option value="Lost">I Lost Something</option>
+                                    <option value="Found">I Found Something</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Item Name</label>
+                                <input type="text" id="lf-item" placeholder="e.g., Water Bottle" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Color</label>
+                                <input type="text" id="lf-color" placeholder="e.g., Blue">
+                            </div>
+                            <div class="form-group">
+                                <label>Distinct Feature</label>
+                                <input type="text" id="lf-feature" placeholder="e.g., Scratch on back">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Last Seen / Found Location</label>
+                                <input type="text" id="lf-location" placeholder="e.g., RJ Block" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Contact Number</label>
+                                <input type="tel" id="lf-contact" placeholder="Your Phone Number" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Upload Image (Optional)</label>
+                            <input type="file" id="lf-image" accept="image/*" onchange="previewImage(this)">
+                        </div>
+                        <button type="submit" class="primary-btn">Submit Report</button>
+                    </form>
+                </div>
+
+                <div class="card">
+                    <h2>Recent Reports</h2>
+                    <div class="items-grid" id="lost-items-grid">
+                        <div class="item-card lost">
+                            <span class="badge">Lost</span>
+                            <h3 style="margin-bottom: 8px; color: var(--primary-dark);">Black Wallet</h3>
+                            <p style="font-size: 13px; margin-bottom: 4px; color: var(--text-muted);"><strong>Location:</strong> Cafeteria</p>
+                            <p style="font-size: 13px; color: var(--text-muted);"><strong>Contact:</strong> 9876543210</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // --- 1. DATA CONFIGURATION ---
+        const outdoorDestinations = {
+            rj: { name: 'RJ Block', path: 'M 150,550 L 150,300 Q 150,150 300,150 L 450,150', alt: 'M 150,550 L 300,550 L 300,150 L 450,150', dist: '450m', time: '6 mins' },
+            pv: { name: 'PV Block', path: 'M 150,550 L 300,550 L 300,450 L 650,450 L 650,300', alt: 'M 150,550 L 150,300 L 650,300', dist: '680m', time: '9 mins' },
+            ss: { name: 'SS Block', path: 'M 150,550 L 150,300 Q 150,150 300,150', alt: 'M 150,550 L 300,550 L 300,150', dist: '380m', time: '5 mins' },
+            ground: { name: 'College Ground', path: 'M 150,550 L 300,550 L 300,450 L 450,450', alt: 'M 150,550 L 450,550', dist: '320m', time: '4 mins' },
+            cafeteria: { name: 'Cafeteria', path: 'M 150,550 L 300,550 L 300,450 L 700,450', alt: 'M 150,550 L 700,550', dist: '580m', time: '8 mins' },
+            mess: { name: 'MESS', path: 'M 150,550 L 300,550 L 300,600 L 550,600', alt: 'M 150,550 L 550,550', dist: '400m', time: '5 mins' },
+            auditorium: { name: 'Auditorium', path: 'M 150,550 L 150,300 L 300,300 L 300,100', alt: 'M 150,550 L 300,550 L 300,100', dist: '500m', time: '7 mins' },
+            seminar: { name: 'Seminar Halls', path: 'M 150,550 L 300,550 L 300,150 L 500,150', alt: 'M 150,550 L 500,550', dist: '420m', time: '6 mins' },
+            library: { name: 'Library', path: 'M 150,550 L 150,300 L 450,300', alt: 'M 150,550 L 450,550', dist: '350m', time: '5 mins' }
+        };
+
+        // Indoor Data (Blueprint Layout)
+        const indoorData = {};
+        const blocks = ['rj', 'pv', 'ss'];
+        
+        blocks.forEach(b => {
+            indoorData[b] = { name: b.toUpperCase() + ' Block', floors: { 'Ground': [], '1st': [], '2nd': [] } };
+            
+            // Ground Floor (Matches Blueprint Ref)
+            indoorData[b].floors['Ground'].push({ id: 'lab1', name: 'CS LAB', sub: "11'-0\" X 10'-0\"", x: 50, y: 50, w: 250, h: 180 });
+            indoorData[b].floors['Ground'].push({ id: 'hod', name: 'HOD ROOM', sub: "8'-6\" X 4'-3\"", x: 50, y: 250, w: 150, h: 100 });
+            indoorData[b].floors['Ground'].push({ id: 'cns', name: 'COUNSELOR', sub: "5'-1\" X 5'-10\"", x: 210, y: 250, w: 90, h: 100 });
+            indoorData[b].floors['Ground'].push({ id: 'lab2', name: 'PHYSICS LAB', sub: "8'-6\" X 4'-2\"", x: 50, y: 360, w: 250, h: 100 });
+            indoorData[b].floors['Ground'].push({ id: 'sem', name: 'SEMINAR HALL', sub: "11'-0\" X 10'-0\"", x: 450, y: 50, w: 250, h: 180 });
+            indoorData[b].floors['Ground'].push({ id: 'c1', name: 'CLASSROOM 1', sub: "11'-3\" X 9'-6\"", x: 450, y: 250, w: 250, h: 150 });
+            indoorData[b].floors['Ground'].push({ id: 'c2', name: 'CLASSROOM 2', sub: "14'-5\" X 10'-0\"", x: 450, y: 410, w: 250, h: 150 });
+            indoorData[b].floors['Ground'].push({ id: 'stairs', name: 'STAIRS', sub: "UP", x: 50, y: 470, w: 250, h: 90 });
+
+            // 1st Floor (Classrooms 3-28)
+            let cx = 50, cy = 50;
+            for(let i=3; i<=28; i++) {
+                indoorData[b].floors['1st'].push({ id: `c${i}`, name: `CLASSROOM ${i}`, sub: "", x: cx, y: cy, w: 150, h: 100 });
+                cx += 160;
+                if(cx > 550) { cx = 50; cy += 110; }
+            }
+
+            // 2nd Floor (Classrooms 29-54)
+            cx = 50; cy = 50;
+            for(let i=29; i<=54; i++) {
+                indoorData[b].floors['2nd'].push({ id: `c${i}`, name: `CLASSROOM ${i}`, sub: "", x: cx, y: cy, w: 150, h: 100 });
+                cx += 160;
+                if(cx > 550) { cx = 50; cy += 110; }
+            }
+        });
+
+        // --- 2. LOGIN & INITIALIZATION ---
+        function toggleLoginFields() {
+            const role = document.getElementById('login-role').value;
+            if(role === 'student') {
+                document.getElementById('student-fields').classList.remove('hidden');
+                document.getElementById('visitor-fields').classList.add('hidden');
+            } else {
+                document.getElementById('student-fields').classList.add('hidden');
+                document.getElementById('visitor-fields').classList.remove('hidden');
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const role = document.getElementById('login-role').value;
+            
+            // Setup Profile
+            if(role === 'student') {
+                document.getElementById('user-display-name').innerText = "Student";
+                document.getElementById('user-role-display').innerText = "Student account";
+                document.getElementById('user-avatar').innerText = "S";
+            } else {
+                document.getElementById('user-display-name').innerText = "Visitor";
+                document.getElementById('user-role-display').innerText = "Guest Account";
+                document.getElementById('user-avatar').innerText = "V";
+            }
+
+            // Hide login, show app
+            document.getElementById('login-screen').style.display = 'none';
+            document.getElementById('app-container').style.display = 'flex';
+            
+            lucide.createIcons();
+            updateIndoorMap(); // Pre-render indoor map
+        }
+
+        function logout() {
+            document.getElementById('app-container').style.display = 'none';
+            document.getElementById('login-screen').style.display = 'flex';
+        }
+
+        // --- 3. NAVIGATION UI LOGIC ---
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('closed');
+        }
+
+        function switchTab(tabId, element) {
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            element.classList.add('active');
+            document.querySelectorAll('.content-area').forEach(el => el.classList.remove('active'));
+            document.getElementById(`${tabId}-area`).classList.add('active');
+            
+            const titles = { dashboard: 'Smart Navigation', booking: 'Resource Booking', tokens: 'Service Tokens', lost: 'Lost & Found' };
+            document.getElementById('breadcrumb').innerText = `RMK / ${titles[tabId]}`;
+        }
+
+        // --- 4. OUTDOOR ROUTING ---
+        let isAltRoute = false;
+        let currentDest = null;
+
+        function setNavMode(mode) {
+            document.getElementById('btn-outdoor').classList.toggle('active', mode === 'outdoor');
+            document.getElementById('btn-indoor').classList.toggle('active', mode === 'indoor');
+            
+            document.getElementById('outdoor-ui').classList.toggle('hidden', mode === 'indoor');
+            document.getElementById('indoor-ui').classList.toggle('hidden', mode === 'outdoor');
+            
+            document.getElementById('custom-map-container').classList.toggle('show', mode === 'outdoor');
+            document.getElementById('indoor-map-container').style.display = mode === 'indoor' ? 'flex' : 'none';
+
+            if(mode === 'indoor') updateIndoorMap();
+        }
+
+        function handleOutdoorRoute(destId) {
+            if(!destId) return resetNavigation();
+            currentDest = outdoorDestinations[destId];
+            
+            document.getElementById('outdoor-route-details').classList.add('show');
+            document.getElementById('dest-name').innerText = currentDest.name;
+            document.getElementById('route-dist').innerText = `Distance: ${currentDest.dist}`;
+            document.getElementById('route-time').innerText = `Time: ~${currentDest.time}`;
+
+            const marker = document.getElementById('marker-dest');
+            marker.classList.remove('hidden');
+            
+            const pathParts = currentDest.path.split(' ');
+            const lastPart = pathParts[pathParts.length - 1]; 
+            const [x, y] = lastPart.split(',');
+            marker.setAttribute('transform', `translate(${x}, ${y})`);
+
+            drawRoute(false);
+        }
+
+        function drawRoute(alt) {
+            if(!currentDest) return;
+            const mainPath = document.getElementById('route-main');
+            const altPath = document.getElementById('route-alt');
+            
+            if(alt) {
+                mainPath.classList.add('hidden');
+                altPath.classList.remove('hidden');
+                altPath.setAttribute('d', currentDest.alt);
+                altPath.style.animation = 'none'; altPath.offsetHeight; altPath.style.animation = 'drawRoute 2s ease-out forwards';
+            } else {
+                altPath.classList.add('hidden');
+                mainPath.classList.remove('hidden');
+                mainPath.setAttribute('d', currentDest.path);
+                mainPath.style.animation = 'none'; mainPath.offsetHeight; mainPath.style.animation = 'drawRoute 2s ease-out forwards';
+            }
+        }
+
+        function toggleAltRoute() {
+            isAltRoute = !isAltRoute;
+            drawRoute(isAltRoute);
+            
+            const btn = document.querySelector('.alt-route-btn');
+            if(isAltRoute) {
+                btn.innerHTML = '<i data-lucide="check" size="16"></i> Using Alternative Route';
+                btn.style.background = '#dcfce7'; btn.style.color = '#166534';
+                document.getElementById('route-dist').innerText = `Distance: ${parseInt(currentDest.dist)+150}m`;
+                document.getElementById('route-time').innerText = `Time: ~${parseInt(currentDest.time)+2} mins`;
+            } else {
+                btn.innerHTML = '<i data-lucide="git-branch" size="16"></i> Show Alternative Route';
+                btn.style.background = '#f1f5f9'; btn.style.color = 'var(--primary-dark)';
+                document.getElementById('route-dist').innerText = `Distance: ${currentDest.dist}`;
+                document.getElementById('route-time').innerText = `Time: ~${currentDest.time}`;
+            }
+            lucide.createIcons();
+        }
+
+        function resetNavigation() {
+            document.getElementById('dest-select').value = '';
+            document.getElementById('outdoor-route-details').classList.remove('show');
+            document.getElementById('marker-dest').classList.add('hidden');
+            document.getElementById('route-main').classList.add('hidden');
+            document.getElementById('route-alt').classList.add('hidden');
+            currentDest = null; isAltRoute = false;
+            
+            const btn = document.querySelector('.alt-route-btn');
+            btn.innerHTML = '<i data-lucide="git-branch" size="16"></i> Show Alternative Route';
+            btn.style.background = '#f1f5f9'; btn.style.color = 'var(--primary-dark)';
+            lucide.createIcons();
+        }
+
+        // --- 5. INDOOR ARCHITECTURAL BLUEPRINT ---
+        function updateIndoorMap() {
+            const blockId = document.getElementById('block-select').value;
+            const floorId = document.getElementById('floor-select').value;
+            
+            const blockData = indoorData[blockId];
+            if(!blockData || !blockData.floors[floorId]) return;
+
+            document.getElementById('indoor-map-title').innerText = `${blockData.name} - ${floorId} Floor`;
+
+            const svg = document.getElementById('floor-svg');
+            svg.innerHTML = ''; // Clear
+
+            // Draw Main Outline (Thick Wall)
+            const outline = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            outline.setAttribute("x", 30); outline.setAttribute("y", 30);
+            outline.setAttribute("width", 700); outline.setAttribute("height", 540);
+            outline.setAttribute("class", "bp-bg");
+            svg.appendChild(outline);
+
+            const wallOutline = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+            wallOutline.setAttribute("x", 30); wallOutline.setAttribute("y", 30);
+            wallOutline.setAttribute("width", 700); wallOutline.setAttribute("height", 540);
+            wallOutline.setAttribute("class", "bp-wall-thick");
+            svg.appendChild(wallOutline);
+
+            // Draw Corridor Line
+            const corridor = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            corridor.setAttribute("x1", 320); corridor.setAttribute("y1", 30);
+            corridor.setAttribute("x2", 320); corridor.setAttribute("y2", 570);
+            corridor.setAttribute("class", "bp-wall");
+            corridor.setAttribute("stroke-width", "2");
+            svg.appendChild(corridor);
+
+            // Draw Pillars (Matching reference)
+            const pillarCoords = [
+                [30, 30], [320, 30], [730, 30],
+                [30, 240], [320, 240], [730, 240],
+                [30, 360], [320, 360], [730, 360],
+                [30, 570], [320, 570], [730, 570]
+            ];
+            pillarCoords.forEach(coord => {
+                const p = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                p.setAttribute("x", coord[0] - 8); p.setAttribute("y", coord[1] - 8);
+                p.setAttribute("width", 16); p.setAttribute("height", 16);
+                p.setAttribute("class", "bp-pillar");
+                svg.appendChild(p);
+            });
+
+            // Draw Rooms
+            const rooms = blockData.floors[floorId];
+            rooms.forEach(room => {
+                // Room Box
+                const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+                rect.setAttribute("x", room.x); rect.setAttribute("y", room.y);
+                rect.setAttribute("width", room.w); rect.setAttribute("height", room.h);
+                rect.setAttribute("class", "bp-room");
+                rect.onclick = () => alert(`Navigating to ${room.name}\nType: ${room.id.toUpperCase()}\nClick OK to highlight.`);
+                svg.appendChild(rect);
+
+                // Room Name
+                const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                text.setAttribute("x", room.x + (room.w / 2));
+                text.setAttribute("y", room.y + (room.h / 2) - 5);
+                text.setAttribute("class", "bp-room-text");
+                text.textContent = room.name;
+                svg.appendChild(text);
+
+                // Room Subtext (Dimensions)
+                if (room.sub) {
+                    const subtext = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    subtext.setAttribute("x", room.x + (room.w / 2));
+                    subtext.setAttribute("y", room.y + (room.h / 2) + 12);
+                    subtext.setAttribute("class", "bp-room-subtext");
+                    subtext.textContent = room.sub;
+                    svg.appendChild(subtext);
+                }
+
+                // Draw Door (small gap in wall) - simplified visual
+                if(room.id !== 'stairs') {
+                    const door = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                    // Position door based on room location (left or right side)
+                    if(room.x < 320) { // Left side rooms
+                        door.setAttribute("x1", room.x + room.w); door.setAttribute("y1", room.y + room.h/2);
+                        door.setAttribute("x2", room.x + room.w); door.setAttribute("y2", room.y + room.h/2 + 20);
+                    } else { // Right side rooms
+                        door.setAttribute("x1", room.x); door.setAttribute("y1", room.y + room.h/2);
+                        door.setAttribute("x2", room.x); door.setAttribute("y2", room.y + room.h/2 + 20);
+                    }
+                    door.setAttribute("class", "bp-door");
+                    svg.appendChild(door);
+                }
+            });
+
+            // Update Sensors
+            const currentRoom = rooms[0];
+            if(currentRoom) {
+                document.getElementById('lifi-status').innerText = `Connected: LIFI-${blockId}-${floorId}`;
+                document.getElementById('ble-status').innerText = `Nearest: BLE-${blockId}-${floorId} (RSSI: -65dBm)`;
+            }
+        }
+
+        // --- 6. SERVICE FORMS & QR ---
+        function submitBooking(e) {
+            e.preventDefault();
+            document.getElementById('booking-form-card').classList.add('hidden');
+            document.getElementById('booking-success-card').classList.remove('hidden');
+        }
+        function resetBooking() {
+            document.getElementById('booking-form-card').classList.remove('hidden');
+            document.getElementById('booking-success-card').classList.add('hidden');
+        }
+
+        function generateToken(e) {
+            e.preventDefault();
+            const purpose = document.getElementById('token-purpose').value;
+            const randomId = Math.floor(1000 + Math.random() * 9000);
+            
+            document.getElementById('ticket-id').innerText = `RMK-${randomId}`;
+            document.getElementById('ticket-purpose').innerText = purpose;
+            document.getElementById('ticket-time').innerText = new Date().toLocaleTimeString();
+
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = ''; 
+            new QRCode(qrContainer, {
+                text: `RMK-TOKEN:${randomId} | Purpose: ${purpose}`,
+                width: 120, height: 120,
+                colorDark : "#1e3a8a", colorLight : "#ffffff"
+            });
+
+            document.getElementById('token-form-card').classList.add('hidden');
+            document.getElementById('token-display-card').classList.remove('hidden');
+        }
+        function resetToken() {
+            document.getElementById('token-form-card').classList.remove('hidden');
+            document.getElementById('token-display-card').classList.add('hidden');
+            document.getElementById('token-purpose').value = '';
+        }
+
+        let uploadedImageBase64 = null;
+        function previewImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) { uploadedImageBase64 = e.target.result; };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+
+        function submitLostItem(e) {
+            e.preventDefault();
+            const type = document.getElementById('lf-type').value;
+            const item = document.getElementById('lf-item').value;
+            const color = document.getElementById('lf-color').value;
+            const location = document.getElementById('lf-location').value;
+            const contact = document.getElementById('lf-contact').value;
+
+            const grid = document.getElementById('lost-items-grid');
+            const card = document.createElement('div');
+            card.className = `item-card ${type.toLowerCase()}`;
+            
+            let imgHtml = uploadedImageBase64 ? `<img src="${uploadedImageBase64}" class="item-img" style="display:block;">` : '';
+
+            card.innerHTML = `
+                <span class="badge">${type}</span>
+                <h3 style="margin-bottom: 8px; color: var(--primary-dark);">${item}</h3>
+                <p style="font-size: 13px; margin-bottom: 4px; color: var(--text-muted);"><strong>Color:</strong> ${color || 'N/A'}</p>
+                <p style="font-size: 13px; margin-bottom: 4px; color: var(--text-muted);"><strong>Location:</strong> ${location}</p>
+                <p style="font-size: 13px; color: var(--text-muted);"><strong>Contact:</strong> ${contact}</p>
+                ${imgHtml}
+            `;
+
+            grid.prepend(card);
+            e.target.reset();
+            uploadedImageBase64 = null;
+            alert('Report submitted successfully!');
+        }
+    </script>
+</body>
+</html>
